@@ -281,7 +281,7 @@ class Doc2Project {
 				}
 	
 			}
-			elseif (!empty($conf->global->DOC2PROJECT_USE_NOMENCLATURE_AND_WORKSTATION))
+			elseif (!empty($conf->global->DOC2PROJECT_USE_NOMENCLATURE_AND_WORKSTATION) && !empty($conf->nomenclature->enabled))
 			{
 				//self::createOneTask(...); //Avec les postes de travails liés à la nomenclature
 				if(!empty($line->fk_product)) {
@@ -398,7 +398,28 @@ class Doc2Project {
 				}
 				else{
 					
-					self::lineToTask($object,$line,$project,$start,$end,0,false,0,$story);
+					$fk_task = self::lineToTask($object,$line,$project,$start,$end,0,false,0,$story);
+
+                    if (!empty($conf->global->DOC2PROJECT_CONVERT_NOMENCLATUREDET_INTO_TASKS) && !empty($conf->nomenclature->enabled))
+                    {
+                        if (!defined('INC_FROM_DOLIBARR')) define('INC_FROM_DOLIBARR',true);
+                        dol_include_once('/nomenclature/config.php');
+                        dol_include_once('/nomenclature/class/nomenclature.class.php');
+                        $nomenclature = new TNomenclature($db);
+                        $PDOdb = new TPDOdb($db);
+
+                        $nomenclature->loadByObjectId($PDOdb,$line->rowid, $object->element, false, $line->fk_product);//get lines of nomenclature
+                        if (in_array($conf->global->DOC2PROJECT_CONVERT_NOMENCLATUREDET_INTO_TASKS, array('onlyTNomenclatureDet', 'both')))
+                        {
+                            $detailsNomenclature=$nomenclature->getDetails($line->qty);
+                            self::nomenclaturedetToTask($detailsNomenclature, $line, $object, $project, $start, $end, $fk_task, $story);
+                        }
+
+                        if (in_array($conf->global->DOC2PROJECT_CONVERT_NOMENCLATUREDET_INTO_TASKS, array('onlyTNomenclatureWorkstation', 'both')))
+                        {
+                            // TODO ... create project task from TNomenclatureWorkstation
+                        }
+                    }
 				}
 			}
 		}
@@ -533,7 +554,31 @@ class Doc2Project {
 		
 		return null;
 	}
-	
+
+
+	public static function nomenclaturedetToTask($detailsNomenclature, $line, $object, $project, $start, $end, $fk_task_parent = 0, $stories='')
+    {
+        global $db;
+
+        foreach ($detailsNomenclature as $detailNomen)
+        {
+            $lineNomenclature = (object) $detailNomen;
+
+            $product = new Product($db);
+            $product->fetch($lineNomenclature->fk_product);
+
+            $lineNomenclature->product_label = $product->label;
+
+            $new_fk_task_parent = self::lineToTask($object, $lineNomenclature, $project, $start, $end, $fk_task_parent, false, 0, $stories);
+            if (!empty($detailNomen['childs']))
+            {
+                self::nomenclaturedetToTask($detailNomen['childs'], $line, $object, $project, $start, $end, $new_fk_task_parent, $stories);
+            }
+        }
+
+        return 1;
+    }
+
 	/* Converti une ligne de nomenclature en tache.
 	 * $detailsNomenclature => resultat de getDetails() de la classe nomenclature 
 	 * $line => ligne courante (propaldet/orderdet)
