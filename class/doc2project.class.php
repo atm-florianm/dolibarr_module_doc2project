@@ -156,7 +156,7 @@ class Doc2Project {
 	}
 	
 	public static function lineToTask(&$object,&$line, &$project,&$start,&$end,$fk_task_parent=0,$isParent=false,$fk_workstation=0,$story='') {
-		
+
 		global $conf,$langs,$db,$user;
 		
 		$product = new Product($db);
@@ -205,7 +205,7 @@ class Doc2Project {
 			$product->fetch($line->fk_product);
 		
 			// On part du principe que les services sont vendus à l'heure ou au jour. Pas au mois ni autre.
-		
+            $product->duration_value = $product->duration_value ?: 0; // avoid warning when $product->duration_value === ''
 			$durationInSec = $line->qty * $product->duration_value * 3600;
 		
 			$nbDays = 0;
